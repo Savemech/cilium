@@ -11,6 +11,7 @@ package metrics
 import (
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -18,7 +19,7 @@ import (
 )
 
 var (
-	registry = prometheus.NewRegistry()
+	registry = prometheus.NewPedanticRegistry()
 
 	// Namespace is used to scope metrics from cilium. It is prepended to metric
 	// names and separated with a '_'
@@ -71,6 +72,36 @@ var (
 		Name:      "policy_import_errors",
 		Help:      "Number of times a policy import has failed",
 	})
+
+	// Events
+
+	// EventTS*is the time in seconds since epoch that we last recieved an
+	// event that we will handle
+	// source is one of k8s, containerd or apia
+
+	// EventTSK8s is the timestamp of k8s events
+	EventTSK8s = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace:   Namespace,
+		Name:        "event_ts",
+		Help:        "Last timestamp when we received an event",
+		ConstLabels: prometheus.Labels{"source": "k8s"},
+	})
+
+	// EventTSContainerd is the timestamp of containerd events
+	EventTSContainerd = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace:   Namespace,
+		Name:        "event_ts",
+		Help:        "Last timestamp when we received an event",
+		ConstLabels: prometheus.Labels{"source": "containerd"},
+	})
+
+	// EventTSAPI is the timestamp of containerd events
+	EventTSAPI = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace:   Namespace,
+		Name:        "event_ts",
+		Help:        "Last timestamp when we received an event",
+		ConstLabels: prometheus.Labels{"source": "api"},
+	})
 )
 
 func init() {
@@ -85,6 +116,10 @@ func init() {
 	registry.MustRegister(PolicyCount)
 	registry.MustRegister(PolicyRevision)
 	registry.MustRegister(PolicyImportErrors)
+
+	registry.MustRegister(EventTSK8s)
+	registry.MustRegister(EventTSContainerd)
+	registry.MustRegister(EventTSAPI)
 }
 
 // Enable begins serving prometheus metrics on the address passed in. Addresses
@@ -98,4 +133,11 @@ func Enable(addr string) error {
 	}()
 
 	return nil
+}
+
+// SetTSValue sets the gauge to the time value provided
+func SetTSValue(c prometheus.Gauge, ts time.Time) {
+	// Build time in seconds since the epoch. Prometheus only takes floating
+	// point values, however, and urges times to be in seconds
+	c.Set(float64(ts.UnixNano()) / float64(1000000000))
 }
