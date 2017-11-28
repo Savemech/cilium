@@ -44,20 +44,23 @@ var (
 
 // LockPath locks the specified path and returns the Lock
 func LockPath(path string) (*Lock, error) {
+	var pathLock *lock.Mutex // handle to the path's lock from lockPaths
+
 	lockPathsMU.Lock()
 	if lockPaths[path] == nil {
 		lockPaths[path] = &lock.Mutex{}
 	}
+	pathLock = lockPaths[path]
 	lockPathsMU.Unlock()
 
 	trace("Creating lock", nil, log.Fields{fieldKey: path})
 
 	// Take the local lock as both etcd and consul protect per client
-	lockPaths[path].Lock()
+	pathLock.Lock()
 
 	lock, err := Client().LockPath(path)
 	if err != nil {
-		lockPaths[path].Unlock()
+		pathLock.Unlock()
 		return nil, fmt.Errorf("Error while locking path %s: %s", path, err)
 	}
 
@@ -69,7 +72,9 @@ func LockPath(path string) (*Lock, error) {
 func (l *Lock) Unlock() error {
 	err := l.lock.Unlock()
 
+	lockPathsMU.Lock()
 	lockPaths[l.path].Unlock()
+	lockPathsMU.Unlock()
 	if err == nil {
 		trace("Unlocked", nil, log.Fields{fieldKey: l.path})
 	}
